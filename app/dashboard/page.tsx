@@ -117,6 +117,26 @@ export default function DashboardPage() {
     router.push(`/create?edit=${room.id}`);
   };
 
+  const handleExpire = async (room: RoomMeta) => {
+    if (!confirm('이 방을 즉시 만료시키시겠습니까?')) return;
+
+    try {
+      // Set expiresAt to now
+      await apiB.updateRoom(room.id, {
+        expiresAt: new Date().toISOString(),
+      });
+      setRooms(rooms.filter((r) => r.id !== room.id));
+      setToast({ message: '방이 만료되었습니다.', type: 'success' });
+      trackEvent('expire_room', { roomId: room.id });
+    } catch (error) {
+      const errorResp = error as ErrorResp;
+      setToast({
+        message: errorResp?.error?.message || '만료 처리에 실패했습니다.',
+        type: 'error',
+      });
+    }
+  };
+
   const handleDelete = async (roomId: number) => {
     if (!confirm('정말 이 방을 삭제하시겠습니까?')) return;
 
@@ -211,6 +231,7 @@ export default function DashboardPage() {
                   room={room}
                   showActions
                   onEdit={() => handleEdit(room)}
+                  onExpire={() => handleExpire(room)}
                   onShare={() => handleShare(room)}
                   onDelete={() => handleDelete(room.id)}
                   onClick={() => router.push(`/s/${room.id}`)}

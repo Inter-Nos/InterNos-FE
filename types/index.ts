@@ -20,6 +20,7 @@ export interface RoomCardProps {
   onClick?: () => void;
   showActions?: boolean;
   onEdit?: () => void;
+  onExpire?: () => void;
   onDelete?: () => void;
   onShare?: () => void;
 }
