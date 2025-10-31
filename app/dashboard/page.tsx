@@ -8,7 +8,8 @@ import RoomCard from '@/components/RoomCard';
 import ShareModal from '@/components/ShareModal';
 import Toast from '@/components/Toast';
 import { apiA, apiB } from '@/lib/api';
-import { fetchSession, isAuthenticated } from '@/lib/session';
+import { fetchSession, isAuthenticated, getCurrentUser } from '@/lib/session';
+import { trackEvent, trackUserVisit } from '@/lib/tracking';
 import type { DashboardResp, RoomMeta, ErrorResp } from '@/types/api';
 
 export default function DashboardPage() {
@@ -32,7 +33,9 @@ export default function DashboardPage() {
       try {
         const [dashboardData] = await Promise.all([
           apiA.getDashboard(range),
-          // TODO: Load user's rooms list - need API endpoint or fetch from rooms with filter
+          // Note: API for fetching user's own rooms list is not available in the current API spec.
+          // This would require a new endpoint like GET /me/rooms or GET /rooms?ownerId=...
+          // For now, rooms list is empty. Backend API should be extended to support this.
         ]);
         setDashboard(dashboardData);
       } catch (error) {
@@ -48,6 +51,14 @@ export default function DashboardPage() {
     };
 
     loadData();
+    
+    // Track user visit for dashboard
+    const user = getCurrentUser();
+    if (user) {
+      trackUserVisit();
+    }
+    
+    trackEvent('view_dashboard');
   }, [router, range]);
 
   const handleShare = (room: RoomMeta) => {

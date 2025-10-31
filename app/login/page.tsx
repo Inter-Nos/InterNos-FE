@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { apiA } from '@/lib/api';
 import { fetchSession } from '@/lib/session';
 import { useAuthStore } from '@/store/auth';
+import { trackEvent } from '@/lib/tracking';
 import type { ErrorResp } from '@/types/api';
 import Toast from '@/components/Toast';
 
@@ -22,6 +23,8 @@ export default function LoginPage() {
     fetchSession().catch(() => {
       // Ignore errors on initial load
     });
+    
+    trackEvent('view_login');
   }, []);
 
   const validateForm = (): boolean => {
@@ -53,9 +56,11 @@ export default function LoginPage() {
     try {
       if (mode === 'register') {
         await apiA.register({ username, password });
+        trackEvent('submit_register', { username });
         setToast({ message: '가입 완료! 로그인 중...', type: 'success' });
       } else {
         await apiA.login({ username, password });
+        trackEvent('submit_login', { username });
       }
 
       // Refresh session to get CSRF token

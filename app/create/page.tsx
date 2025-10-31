@@ -8,6 +8,7 @@ import ShareModal from '@/components/ShareModal';
 import Toast from '@/components/Toast';
 import { apiB } from '@/lib/api';
 import { fetchSession, isAuthenticated } from '@/lib/session';
+import { trackEvent } from '@/lib/tracking';
 import type { CreateRoomReq, ContentType, Visibility, Policy, ErrorResp } from '@/types/api';
 
 export default function CreatePage() {
@@ -35,6 +36,8 @@ export default function CreatePage() {
       }
     };
     checkAuth();
+    
+    trackEvent('view_create');
   }, [router]);
 
   const handleImageUploadComplete = (fileRef: string) => {
@@ -105,6 +108,13 @@ export default function CreatePage() {
       };
 
       const result = await apiB.createRoom(req);
+
+      trackEvent('submit_create_room', {
+        roomId: result.id,
+        visibility,
+        contentType,
+        policy,
+      });
 
       setShareModal({
         url: result.shareUrl,

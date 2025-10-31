@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import { trackEvent } from '@/lib/tracking';
 import type { ShareModalProps } from '@/types';
 
 export default function ShareModal({
@@ -22,6 +23,7 @@ export default function ShareModal({
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
+      trackEvent('copy_share_link', { shareUrl, roomTitle });
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       console.error('Failed to copy:', error);
