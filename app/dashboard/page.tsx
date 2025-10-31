@@ -33,9 +33,15 @@ export default function DashboardPage() {
       try {
         const [dashboardData] = await Promise.all([
           apiA.getDashboard(range),
-          // Note: API for fetching user's own rooms list is not available in the current API spec.
-          // This would require a new endpoint like GET /me/rooms or GET /rooms?ownerId=...
-          // For now, rooms list is empty. Backend API should be extended to support this.
+          // Note: API for fetching user's own rooms list with per-room metrics is not available.
+          // Required:
+          // 1. GET /me/rooms or GET /rooms?ownerId=... endpoint
+          // 2. RoomMeta should include per-room visit/attempt/success metrics:
+          //    - visits: number
+          //    - attempts: number  
+          //    - solved: number
+          //    - solveRate: number
+          // Backend API should be extended to support this for full plan.md compliance.
         ]);
         setDashboard(dashboardData);
       } catch (error) {
