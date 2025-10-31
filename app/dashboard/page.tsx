@@ -10,7 +10,7 @@ import Toast from '@/components/Toast';
 import { apiA, apiB } from '@/lib/api';
 import { fetchSession, isAuthenticated, getCurrentUser } from '@/lib/session';
 import { trackEvent, trackUserVisit } from '@/lib/tracking';
-import type { DashboardResp, RoomMeta, ErrorResp } from '@/types/api';
+import type { DashboardResp, RoomMeta, ErrorResp, Visibility, Policy, ContentType } from '@/types/api';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -31,19 +31,15 @@ export default function DashboardPage() {
       }
 
       try {
-        const [dashboardData] = await Promise.all([
-          apiA.getDashboard(range),
-          // Note: API for fetching user's own rooms list with per-room metrics is not available.
-          // Required:
-          // 1. GET /me/rooms or GET /rooms?ownerId=... endpoint
-          // 2. RoomMeta should include per-room visit/attempt/success metrics:
-          //    - visits: number
-          //    - attempts: number  
-          //    - solved: number
-          //    - solveRate: number
-          // Backend API should be extended to support this for full plan.md compliance.
-        ]);
+        const user = getCurrentUser();
+        const dashboardData = await apiA.getDashboard(range);
         setDashboard(dashboardData);
+        
+        // Load user's rooms (try to fetch from available APIs)
+        if (user) {
+          const roomsData = await loadMyRooms(user.id);
+          setRooms(roomsData);
+        }
       } catch (error) {
         const errorResp = error as ErrorResp;
         if (errorResp.error.code === 'UNAUTHORIZED') {
@@ -72,9 +68,52 @@ export default function DashboardPage() {
     setShareModal({ url: shareUrl, title: room.title });
   };
 
+  const loadMyRooms = async (ownerId: number): Promise<RoomMeta[]> => {
+    if (!ownerId) return [];
+    
+    try {
+      // Strategy: Try to get my rooms from public rooms list
+      // Since PublicRoomCard doesn't have ownerId, we use ownerName from session
+      // This is not perfect but works for public rooms
+      // For private rooms and complete solution, we need GET /me/rooms endpoint
+      
+      const user = getCurrentUser();
+      if (!user?.username) return [];
+      
+      // Fetch public rooms and filter by ownerName
+      // Note: This only works if username matches ownerName in public rooms
+      const publicRooms = await apiB.getPublicRooms({ limit: 100 });
+      const myPublicRooms = publicRooms.items.filter(
+        (room) => room.ownerName === user.username
+      );
+      
+      // For each public room, fetch full RoomMeta using /rooms/{id}
+      // This gives us complete information including private room metadata
+      const roomPromises = myPublicRooms.map(async (room) => {
+        try {
+          const roomMeta = await apiB.getRoom(room.id);
+          // Verify it's actually owned by current user
+          if (roomMeta.ownerId === ownerId) {
+            return roomMeta;
+          }
+          return null;
+        } catch (error) {
+          // Room might be private or deleted, skip it
+          return null;
+        }
+      });
+      
+      const rooms = await Promise.all(roomPromises);
+      return rooms.filter((room): room is RoomMeta => room !== null);
+    } catch (error) {
+      // If API call fails, return empty array
+      console.error('Failed to load my rooms:', error);
+      return [];
+    }
+  };
+
   const handleEdit = (room: RoomMeta) => {
-    // Navigate to edit page (to be implemented)
-    // For now, redirect to create page with room data
+    // Navigate to edit page
     router.push(`/create?edit=${room.id}`);
   };
 
