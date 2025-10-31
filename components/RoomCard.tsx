@@ -51,7 +51,7 @@ export default function RoomCard({ room, onClick, showActions, onEdit, onDelete,
 
       <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
         <span>작성자: {isPublicCard ? publicCard?.ownerName : roomMeta?.ownerName}</span>
-        <span>{getPolicyLabel(room.policy)}</span>
+        {roomMeta && <span>{getPolicyLabel(roomMeta.policy)}</span>}
       </div>
 
       {publicCard && (

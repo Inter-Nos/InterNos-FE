@@ -42,9 +42,9 @@ async function fetchWithAuth(
   const method = fetchOptions.method || 'GET';
   const needsCsrf = STATE_CHANGING_METHODS.includes(method) && !skipCsrf;
 
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...fetchOptions.headers,
+    ...(fetchOptions.headers as Record<string, string>),
   };
 
   // Add CSRF token for state-changing requests
