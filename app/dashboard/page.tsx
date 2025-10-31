@@ -66,6 +66,12 @@ export default function DashboardPage() {
     setShareModal({ url: shareUrl, title: room.title });
   };
 
+  const handleEdit = (room: RoomMeta) => {
+    // Navigate to edit page (to be implemented)
+    // For now, redirect to create page with room data
+    router.push(`/create?edit=${room.id}`);
+  };
+
   const handleDelete = async (roomId: number) => {
     if (!confirm('정말 이 방을 삭제하시겠습니까?')) return;
 
@@ -73,6 +79,7 @@ export default function DashboardPage() {
       await apiB.deleteRoom(roomId);
       setRooms(rooms.filter((r) => r.id !== roomId));
       setToast({ message: '방이 삭제되었습니다.', type: 'success' });
+      trackEvent('delete_room', { roomId });
     } catch (error) {
       setToast({ message: '삭제에 실패했습니다.', type: 'error' });
     }
@@ -158,6 +165,7 @@ export default function DashboardPage() {
                   key={room.id}
                   room={room}
                   showActions
+                  onEdit={() => handleEdit(room)}
                   onShare={() => handleShare(room)}
                   onDelete={() => handleDelete(room.id)}
                   onClick={() => router.push(`/s/${room.id}`)}
