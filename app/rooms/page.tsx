@@ -6,6 +6,7 @@ import Layout from '@/components/Layout';
 import RoomCard from '@/components/RoomCard';
 import Toast from '@/components/Toast';
 import { apiB } from '@/lib/api';
+import { trackEvent, trackRoomVisit } from '@/lib/tracking';
 import type { PublicRoomCard, ErrorResp } from '@/types/api';
 
 type SortType = 'trending' | 'new' | 'hard';
@@ -56,6 +57,7 @@ export default function RoomsPage() {
 
   useEffect(() => {
     loadRooms(false);
+    trackEvent('view_rooms', { sort });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sort]);
 
@@ -112,7 +114,10 @@ export default function RoomsPage() {
                 <RoomCard
                   key={room.id}
                   room={room}
-                  onClick={() => router.push(`/s/${room.id}`)}
+                  onClick={() => {
+                    trackRoomVisit(room.id);
+                    router.push(`/s/${room.id}`);
+                  }}
                 />
               ))}
             </div>

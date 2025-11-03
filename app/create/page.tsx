@@ -1,17 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Layout from '@/components/Layout';
 import ImageUploader from '@/components/ImageUploader';
 import ShareModal from '@/components/ShareModal';
 import Toast from '@/components/Toast';
 import { apiB } from '@/lib/api';
 import { fetchSession, isAuthenticated } from '@/lib/session';
-import type { CreateRoomReq, ContentType, Visibility, Policy, ErrorResp } from '@/types/api';
+import { trackEvent } from '@/lib/tracking';
+import type { CreateRoomReq, ContentType, Visibility, Policy, ErrorResp, RoomMeta } from '@/types/api';
 
-export default function CreatePage() {
+function CreatePageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editRoomId = searchParams.get('edit') ? parseInt(searchParams.get('edit')!, 10) : null;
+  const isEditMode = !!editRoomId;
   const [title, setTitle] = useState('');
   const [hint, setHint] = useState('');
   const [answer, setAnswer] = useState('');
@@ -32,10 +36,18 @@ export default function CreatePage() {
       await fetchSession();
       if (!isAuthenticated()) {
         router.push('/login');
+        return;
+      }
+
+      // Load room data if in edit mode
+      if (isEditMode && editRoomId) {
+        loadRoomForEdit(editRoomId);
       }
     };
     checkAuth();
-  }, [router]);
+    
+    trackEvent(isEditMode ? 'view_edit_room' : 'view_create');
+  }, [router, isEditMode, editRoomId]);
 
   const handleImageUploadComplete = (fileRef: string) => {
     setImageFileRef(fileRef);
@@ -45,6 +57,34 @@ export default function CreatePage() {
   const handleImageUploadError = (error: string) => {
     setUploadError(error);
     setImageFileRef(null);
+  };
+
+  const loadRoomForEdit = async (roomId: number) => {
+    try {
+      const room = await apiB.getRoom(roomId);
+      setTitle(room.title);
+      setHint(room.hint);
+      setContentType(room.contentType);
+      setVisibility(room.visibility);
+      setPolicy(room.policy);
+      setViewLimit(room.viewLimit?.toString() || '');
+      setExpiresAt(room.expiresAt ? new Date(room.expiresAt).toISOString().slice(0, 16) : '');
+      
+      if (room.contentType === 'TEXT') {
+        // Note: RoomMeta doesn't include content_text, so we can't pre-fill it
+        // This would require an additional API call or extending RoomMeta schema
+      } else if (room.contentType === 'IMAGE') {
+        // Note: RoomMeta doesn't include image info for editing
+        // User needs to re-upload if editing image
+      }
+    } catch (error) {
+      const errorResp = error as ErrorResp;
+      setToast({
+        message: errorResp?.error?.message || '방 정보를 불러오는데 실패했습니다.',
+        type: 'error',
+      });
+      router.push('/dashboard');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -104,12 +144,43 @@ export default function CreatePage() {
         expiresAt: expiresAt || null,
       };
 
-      const result = await apiB.createRoom(req);
+      if (isEditMode && editRoomId) {
+        // Update existing room
+        await apiB.updateRoom(editRoomId, {
+          title: req.title,
+          hint: req.hint,
+          visibility: req.visibility,
+          policy: req.policy,
+          viewLimit: req.viewLimit,
+          expiresAt: req.expiresAt,
+        });
 
-      setShareModal({
-        url: result.shareUrl,
-        title: title,
-      });
+        trackEvent('update_room', {
+          roomId: editRoomId,
+          visibility,
+          policy,
+        });
+
+        setToast({ message: '방이 수정되었습니다.', type: 'success' });
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 1500);
+      } else {
+        // Create new room
+        const result = await apiB.createRoom(req);
+
+        trackEvent('submit_create_room', {
+          roomId: result.id,
+          visibility,
+          contentType,
+          policy,
+        });
+
+        setShareModal({
+          url: result.shareUrl,
+          title: title,
+        });
+      }
     } catch (error) {
       const errorResp = error as ErrorResp;
       setToast({
@@ -122,7 +193,7 @@ export default function CreatePage() {
   };
 
   return (
-    <Layout headerTitle="방 만들기">
+    <Layout headerTitle={isEditMode ? "방 수정" : "방 만들기"}>
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Title */}
         <div>
@@ -342,7 +413,13 @@ export default function CreatePage() {
           disabled={submitting}
           className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-lg font-medium min-h-[44px]"
         >
-          {submitting ? '생성 중...' : '방 만들기'}
+          {submitting
+            ? isEditMode
+              ? '수정 중...'
+              : '생성 중...'
+            : isEditMode
+            ? '방 수정'
+            : '방 만들기'}
         </button>
       </form>
 
@@ -366,6 +443,20 @@ export default function CreatePage() {
         />
       )}
     </Layout>
+  );
+}
+
+export default function CreatePage() {
+  return (
+    <Suspense fallback={
+      <Layout headerTitle="방 만들기">
+        <div className="flex items-center justify-center h-64">
+          <p className="text-gray-400">로딩 중...</p>
+        </div>
+      </Layout>
+    }>
+      <CreatePageContent />
+    </Suspense>
   );
 }
 

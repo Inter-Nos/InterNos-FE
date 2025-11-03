@@ -6,6 +6,7 @@ import Layout from '@/components/Layout';
 import SolveForm from '@/components/SolveForm';
 import Toast from '@/components/Toast';
 import { apiB } from '@/lib/api';
+import { trackEvent, trackRoomVisit } from '@/lib/tracking';
 import type { SolveMeta, SolveResp, ErrorResp } from '@/types/api';
 
 export default function SolvePage() {
@@ -29,6 +30,8 @@ export default function SolvePage() {
     }
 
     loadSolveMeta();
+    trackRoomVisit(roomId);
+    trackEvent('view_room_detail', { roomId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
@@ -77,6 +80,11 @@ export default function SolvePage() {
 
   const handleSolveSuccess = (result: SolveResp) => {
     setSolveResult(result);
+    trackEvent('submit_solve_ok', {
+      roomId,
+      contentType: result.content.type,
+      policy: result.policyState.policy,
+    });
   };
 
   const handleSolveError = (errorResp: ErrorResp) => {
@@ -87,6 +95,7 @@ export default function SolvePage() {
         const retrySec = (errorResp.error.details?.retryAfterSec as number) || 0;
         setLocked(true);
         setRetryAfter(retrySec);
+        trackEvent('locked_solve', { roomId, retryAfterSec: retrySec });
         setToast({
           message: `너무 많은 시도입니다. ${retrySec}초 후에 다시 시도해주세요.`,
           type: 'error',
@@ -94,15 +103,18 @@ export default function SolvePage() {
         break;
       case 'RATE_LIMITED':
         const rateRetrySec = (errorResp.error.details?.retryAfterSec as number) || 0;
+        trackEvent('rate_limited_solve', { roomId, retryAfterSec: rateRetrySec });
         setToast({
           message: `요청이 너무 많습니다. ${rateRetrySec}초 후에 다시 시도해주세요.`,
           type: 'error',
         });
         break;
       case 'GONE':
+        trackEvent('solve_gone', { roomId });
         setError('이 방은 만료되었거나 더 이상 열람할 수 없습니다.');
         break;
       default:
+        trackEvent('submit_solve_fail', { roomId, errorCode });
         setToast({
           message: errorResp.error.message || '정답 제출에 실패했습니다.',
           type: 'error',

@@ -8,8 +8,9 @@ import RoomCard from '@/components/RoomCard';
 import ShareModal from '@/components/ShareModal';
 import Toast from '@/components/Toast';
 import { apiA, apiB } from '@/lib/api';
-import { fetchSession, isAuthenticated } from '@/lib/session';
-import type { DashboardResp, RoomMeta, ErrorResp } from '@/types/api';
+import { fetchSession, isAuthenticated, getCurrentUser } from '@/lib/session';
+import { trackEvent, trackUserVisit } from '@/lib/tracking';
+import type { DashboardResp, RoomMeta, ErrorResp, Visibility, Policy, ContentType } from '@/types/api';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -30,11 +31,15 @@ export default function DashboardPage() {
       }
 
       try {
-        const [dashboardData] = await Promise.all([
-          apiA.getDashboard(range),
-          // TODO: Load user's rooms list - need API endpoint or fetch from rooms with filter
-        ]);
+        const user = getCurrentUser();
+        const dashboardData = await apiA.getDashboard(range);
         setDashboard(dashboardData);
+        
+        // Load user's rooms (try to fetch from available APIs)
+        if (user) {
+          const roomsData = await loadMyRooms(user.id);
+          setRooms(roomsData);
+        }
       } catch (error) {
         const errorResp = error as ErrorResp;
         if (errorResp.error.code === 'UNAUTHORIZED') {
@@ -48,11 +53,88 @@ export default function DashboardPage() {
     };
 
     loadData();
+    
+    // Track user visit for dashboard
+    const user = getCurrentUser();
+    if (user) {
+      trackUserVisit();
+    }
+    
+    trackEvent('view_dashboard');
   }, [router, range]);
 
   const handleShare = (room: RoomMeta) => {
     const shareUrl = `/s/${room.id}`;
     setShareModal({ url: shareUrl, title: room.title });
+  };
+
+  const loadMyRooms = async (ownerId: number): Promise<RoomMeta[]> => {
+    if (!ownerId) return [];
+    
+    try {
+      // Strategy: Try to get my rooms from public rooms list
+      // Since PublicRoomCard doesn't have ownerId, we use ownerName from session
+      // This is not perfect but works for public rooms
+      // For private rooms and complete solution, we need GET /me/rooms endpoint
+      
+      const user = getCurrentUser();
+      if (!user?.username) return [];
+      
+      // Fetch public rooms and filter by ownerName
+      // Note: This only works if username matches ownerName in public rooms
+      const publicRooms = await apiB.getPublicRooms({ limit: 100 });
+      const myPublicRooms = publicRooms.items.filter(
+        (room) => room.ownerName === user.username
+      );
+      
+      // For each public room, fetch full RoomMeta using /rooms/{id}
+      // This gives us complete information including private room metadata
+      const roomPromises = myPublicRooms.map(async (room) => {
+        try {
+          const roomMeta = await apiB.getRoom(room.id);
+          // Verify it's actually owned by current user
+          if (roomMeta.ownerId === ownerId) {
+            return roomMeta;
+          }
+          return null;
+        } catch (error) {
+          // Room might be private or deleted, skip it
+          return null;
+        }
+      });
+      
+      const rooms = await Promise.all(roomPromises);
+      return rooms.filter((room): room is RoomMeta => room !== null);
+    } catch (error) {
+      // If API call fails, return empty array
+      console.error('Failed to load my rooms:', error);
+      return [];
+    }
+  };
+
+  const handleEdit = (room: RoomMeta) => {
+    // Navigate to edit page
+    router.push(`/create?edit=${room.id}`);
+  };
+
+  const handleExpire = async (room: RoomMeta) => {
+    if (!confirm('이 방을 즉시 만료시키시겠습니까?')) return;
+
+    try {
+      // Set expiresAt to now
+      await apiB.updateRoom(room.id, {
+        expiresAt: new Date().toISOString(),
+      });
+      setRooms(rooms.filter((r) => r.id !== room.id));
+      setToast({ message: '방이 만료되었습니다.', type: 'success' });
+      trackEvent('expire_room', { roomId: room.id });
+    } catch (error) {
+      const errorResp = error as ErrorResp;
+      setToast({
+        message: errorResp?.error?.message || '만료 처리에 실패했습니다.',
+        type: 'error',
+      });
+    }
   };
 
   const handleDelete = async (roomId: number) => {
@@ -62,6 +144,7 @@ export default function DashboardPage() {
       await apiB.deleteRoom(roomId);
       setRooms(rooms.filter((r) => r.id !== roomId));
       setToast({ message: '방이 삭제되었습니다.', type: 'success' });
+      trackEvent('delete_room', { roomId });
     } catch (error) {
       setToast({ message: '삭제에 실패했습니다.', type: 'error' });
     }
@@ -147,6 +230,8 @@ export default function DashboardPage() {
                   key={room.id}
                   room={room}
                   showActions
+                  onEdit={() => handleEdit(room)}
+                  onExpire={() => handleExpire(room)}
                   onShare={() => handleShare(room)}
                   onDelete={() => handleDelete(room.id)}
                   onClick={() => router.push(`/s/${room.id}`)}

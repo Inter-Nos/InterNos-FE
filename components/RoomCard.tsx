@@ -3,7 +3,7 @@
 import type { RoomCardProps } from '@/types';
 import type { PublicRoomCard, RoomMeta } from '@/types/api';
 
-export default function RoomCard({ room, onClick, showActions, onEdit, onDelete, onShare }: RoomCardProps) {
+export default function RoomCard({ room, onClick, showActions, onEdit, onExpire, onDelete, onShare }: RoomCardProps) {
   const isPublicCard = 'attempts1h' in room;
   const publicCard = isPublicCard ? (room as PublicRoomCard) : null;
   const roomMeta = !isPublicCard ? (room as RoomMeta) : null;
@@ -51,7 +51,7 @@ export default function RoomCard({ room, onClick, showActions, onEdit, onDelete,
 
       <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
         <span>작성자: {isPublicCard ? publicCard?.ownerName : roomMeta?.ownerName}</span>
-        <span>{getPolicyLabel(room.policy)}</span>
+        {roomMeta && <span>{getPolicyLabel(roomMeta.policy)}</span>}
       </div>
 
       {publicCard && (
@@ -72,7 +72,7 @@ export default function RoomCard({ room, onClick, showActions, onEdit, onDelete,
         </div>
       )}
 
-      {showActions && (onEdit || onDelete || onShare) && (
+      {showActions && (onEdit || onExpire || onDelete || onShare) && (
         <div className="flex gap-2 mt-3 pt-3 border-t border-gray-800">
           {onEdit && (
             <button
@@ -83,6 +83,17 @@ export default function RoomCard({ room, onClick, showActions, onEdit, onDelete,
               className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm"
             >
               수정
+            </button>
+          )}
+          {onExpire && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onExpire();
+              }}
+              className="flex-1 px-3 py-2 bg-yellow-600 hover:bg-yellow-700 rounded text-sm"
+            >
+              만료
             </button>
           )}
           {onShare && (
