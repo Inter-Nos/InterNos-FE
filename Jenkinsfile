@@ -1,4 +1,4 @@
-// Jenkinsfile (Final Version with serviceAccountName)
+// Jenkinsfile (Final Version without post block)
 pipeline {
     agent {
         kubernetes {
@@ -7,7 +7,6 @@ pipeline {
             apiVersion: v1
             kind: Pod
             spec:
-              # 이 Pod가 'jenkins' 서비스 계정을 사용하도록 명시!
               serviceAccountName: jenkins
               containers:
               - name: kaniko
@@ -51,14 +50,6 @@ pipeline {
                     }
                 }
             }
-        }
-    }
-    
-    post {
-        always {
-            // Workspace Cleanup 플러그인을 설치했거나, 
-            // 설치하지 않았다면 이 블록은 삭제하거나 주석 처리
-            // cleanWs()
         }
     }
 }
