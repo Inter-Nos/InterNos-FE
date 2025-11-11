@@ -1,10 +1,40 @@
-// Jenkinsfile
+// Jenkinsfile (진짜 최종본)
 pipeline {
-    agent any
+    // 도구가 모두 설치된 '만능 공구함' 이미지를 직접 지정
+    agent {
+        kubernetes {
+            defaultContainer 'main'
+            yaml """
+            apiVersion: v1
+            kind: Pod
+            spec:
+              containers:
+              - name: main
+                image: google/cloud-sdk:latest
+                command:
+                - sleep
+                args:
+                - 999999
+                tty: true
+              # Docker-in-Docker 사이드카 컨테이너
+              - name: dind
+                image: docker:dind
+                securityContext:
+                  privileged: true
+                volumeMounts:
+                - name: dind-storage
+                  mountPath: /var/lib/docker
+              volumes:
+              - name: dind-storage
+                emptyDir: {}
+            """
+        }
+    }
 
-    // 환경 변수 설정
     environment {
-        PROJECT_ID = 'k8s-cicd-lab' // 자네의 GCP 프로젝트 ID로 수정 완료!
+        // Docker 데몬이 dind 컨테이너에 있음을 알려줌
+        DOCKER_HOST = 'tcp://localhost:2375'
+        PROJECT_ID = 'k8s-cicd-lab'
         REGION = 'asia-northeast3'
         REPO_NAME = 'internos-repo'
         IMAGE_NAME = 'frontend'
@@ -13,32 +43,23 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                // Git에서 소스 코드를 가져옴
+                // google/cloud-sdk 이미지에는 git이 포함되어 있음
                 checkout scm
             }
         }
 
-        stage('Build Docker Image') {
-            steps {
-                script {
-                    // Docker 이미지 빌드 및 태깅
-                    // 최종 이미지 URL: asia-northeast3-docker.pkg.dev/k8s-cicd-lab/internos-repo/frontend:latest
-                    def imageUrl = "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${IMAGE_NAME}:latest"
-                    sh "docker build -t ${imageUrl} ."
-                }
-            }
-        }
-
-        stage('Push to Artifact Registry') {
+        stage('Build and Push Docker Image') {
             steps {
                 script {
                     def imageUrl = "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${IMAGE_NAME}:latest"
                     
-                    // gcloud를 사용하여 Artifact Registry에 인증
-                    // Workload Identity 덕분에 키 파일 없이 인증 가능!
-                    sh "gcloud auth configure-docker ${REGION}-docker.pkg.dev"
-
-                    // 이미지 푸시
+                    // gcloud로 Artifact Registry 인증
+                    sh "gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet"
+                    
+                    // Docker 이미지 빌드
+                    sh "docker build -t ${imageUrl} ."
+                    
+                    // Docker 이미지 푸시
                     sh "docker push ${imageUrl}"
                 }
             }
