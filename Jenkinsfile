@@ -1,6 +1,6 @@
 // Jenkinsfile (진짜 최종본)
 pipeline {
-    // 도구가 모두 설치된 '만능 공구함' 이미지를 직접 지정
+    // 도구가 모두 설치된 '만능 공구함' Pod를 Jenkinsfile 안에서 직접 정의!
     agent {
         kubernetes {
             defaultContainer 'main'
@@ -14,8 +14,7 @@ pipeline {
                 command:
                 - sleep
                 args:
-                - 999999
-                tty: true
+                - "999999"
               # Docker-in-Docker 사이드카 컨테이너
               - name: dind
                 image: docker:dind
